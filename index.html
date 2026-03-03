@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Win for Life Präventation - Scratch & Win</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Press+Start+2P&family=Roboto:wght@400;700;900&display=swap');
+
+        body {
+            background-color: #1a202c;
+            font-family: 'Roboto', sans-serif;
+            user-select: none;
+            overflow-x: hidden;
+        }
+
+        .lottery-card {
+            background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5), inset 0 0 100px rgba(255,255,255,0.2);
+            border: 8px solid #fbbf24;
+        }
+
+        .scratch-title {
+            font-family: 'Luckiest Guy', cursive;
+            text-shadow: 2px 2px 0px #b45309;
+            line-height: 1.1;
+        }
+
+        .number-box {
+            background: #fff;
+            border: 2px solid #d97706;
+            aspect-ratio: 1/1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            position: relative;
+            z-index: 10;
+            overflow: visible;
+            transition: all 0.3s ease;
+        }
+
+        .number-val {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.8rem;
+            color: #1f2937;
+            text-align: center;
+            line-height: 1.2;
+        }
+
+        /* Increased visibility for prize amounts */
+        .prize-val {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.5rem;
+            color: #059669;
+            margin-top: 6px;
+        }
+
+        .scratch-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+            touch-action: none;
+            z-index: 20;
+            border-radius: 10px;
+        }
+
+        .win-highlight {
+            background: #ffecb3 !important;
+            border: 3px solid #ef4444 !important;
+            transform: scale(1.1);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+            z-index: 15;
+        }
+
+        .text-win-green {
+            color: #10b981 !important;
+        }
+
+        @keyframes pulse-bank {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        .bank-pulsing {
+            animation: pulse-bank 0.1s ease-in-out infinite;
+            color: #fbbf24 !important;
+        }
+
+        @keyframes jackpot-flash {
+            0%, 100% { background-color: #ef4444; color: white; }
+            50% { background-color: #fbbf24; color: #1a202c; }
+        }
+
+        .jackpot-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.5s forwards;
+            pointer-events: none;
+        }
+
+        .jackpot-text {
+            font-family: 'Luckiest Guy', cursive;
+            font-size: 3.5rem;
+            text-align: center;
+            line-height: 1;
+            animation: jackpot-flash 0.2s infinite;
+            padding: 20px;
+            border-radius: 20px;
+            transform: rotate(-5deg);
+        }
+
+        @keyframes floatUpFade {
+            0% { opacity: 0; transform: translateY(0); }
+            20% { opacity: 1; transform: translateY(-15px); }
+            80% { opacity: 1; transform: translateY(-40px); }
+            100% { opacity: 0; transform: translateY(-55px); }
+        }
+
+        .win-anim-text {
+            position: absolute;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.6rem;
+            color: #10b981;
+            text-shadow: 1px 1px 0px #064e3b;
+            pointer-events: none;
+            z-index: 100;
+            animation: floatUpFade 2.5s forwards;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center py-10 px-4 pb-24">
+
+    <!-- Jackpot Overlay -->
+    <div id="jackpot-overlay" class="jackpot-overlay hidden">
+        <div class="jackpot-text">WIN FOR LIFE!<br>$960'000</div>
+        <p class="text-white font-bold mt-8 text-xl animate-bounce">DIES IST DEIN TAG!</p>
+    </div>
+
+    <!-- Header -->
+    <div class="fixed top-0 left-0 right-0 bg-gray-900 text-white p-4 flex justify-between items-center z-50 shadow-lg">
+        <h1 class="text-lg font-black text-yellow-400 leading-tight">WIN FOR LIFE<br><span class="text-xs">PRÄVENTATION</span></h1>
+        <div id="bank-container" class="bg-gray-800 px-4 py-2 rounded-full border border-yellow-500">
+            <span class="text-gray-400 text-xs mr-2 uppercase">KONTO:</span>
+            <span id="bank-balance" class="text-xl font-bold text-green-400">$0.00</span>
+        </div>
+    </div>
+
+    <div class="mt-16 w-full max-w-md">
+        <!-- Ticket Container -->
+        <div id="ticket-container" class="lottery-card rounded-3xl p-6 relative overflow-visible hidden mb-8">
+            <div class="text-center mb-4">
+                <h2 class="scratch-title text-3xl text-white italic">Win for Life<br><span class="text-xl">Präventation</span></h2>
+                <p class="text-[10px] text-amber-900 font-bold uppercase tracking-widest mt-1">Die Chance deines Lebens</p>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="text-amber-900 font-black text-xs mb-2 uppercase text-center">Gewinnzahlen</h3>
+                <div class="relative p-1 bg-black/10 rounded-xl" id="winning-pad-container">
+                    <div class="grid grid-cols-5 gap-2" id="winning-numbers-grid"></div>
+                    <canvas id="winning-canvas" class="scratch-canvas"></canvas>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-amber-900 font-black text-xs mb-2 uppercase text-center">Ihre Zahlen</h3>
+                <div class="relative p-1 bg-black/10 rounded-xl" id="player-pad-container">
+                    <div class="grid grid-cols-5 gap-2" id="player-numbers-grid"></div>
+                    <canvas id="player-canvas" class="scratch-canvas"></canvas>
+                </div>
+            </div>
+
+            <div class="mt-4 flex flex-col items-center min-h-[50px] justify-center">
+                <div id="scratch-instruction" class="text-center text-amber-900 font-bold text-sm animate-pulse">
+                    Rubbeln Sie beide Felder frei!
+                </div>
+                <button id="buy-another-btn" class="hidden bg-gray-900 text-white font-black py-3 px-8 rounded-xl hover:scale-105 transition-transform active:scale-95 shadow-lg">
+                    ZUM HAUPTMENÜ
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Menu -->
+        <div id="main-menu" class="flex flex-col items-center gap-6">
+            <div class="flex flex-col items-center gap-2">
+                <button id="buy-btn" class="bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-black py-4 px-12 rounded-full text-2xl shadow-[0_4px_0_rgb(180,83,9)] active:translate-y-1 active:shadow-none transition-all">
+                    TICKET KAUFEN ($5)
+                </button>
+                <p id="message-box" class="text-gray-400 font-medium h-6"></p>
+            </div>
+
+            <div class="w-full bg-gray-800 rounded-2xl p-4 shadow-xl border border-gray-700">
+                <h3 class="text-gray-400 font-bold text-xs uppercase mb-3 px-1">Spielverlauf</h3>
+                <div id="history-list" class="flex flex-col gap-2 max-h-60 overflow-y-auto pr-1">
+                    <p class="text-gray-500 text-center py-4 text-sm italic">Noch keine Spiele.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const TICKET_PRICE = 5;
+        const RANGE_MAX = 32;
+        const WIN_SYMBOL = "WIN";
+        const JACKPOT_PRIZE = 960000;
+        
+        const PRIZE_POOL = [
+            { amount: 960000, count: 2 },
+            { amount: 10000, count: 2 },
+            { amount: 5000, count: 4 },
+            { amount: 1000, count: 10 },
+            { amount: 500, count: 40 },
+            { amount: 50, count: 8022 },
+            { amount: 20, count: 14980 },
+            { amount: 15, count: 19964 },
+            { amount: 10, count: 179984 },
+            { amount: 5, count: 719992 }
+        ];
+        const TOTAL_TICKETS = 1500000;
+
+        // Starting at 0.00
+        let balance = 0;
+        let displayBalance = 0;
+        let history = [];
+        let currentTicket = null;
+        let scratchedState = { win: false, player: false };
+
+        const bankDisplay = document.getElementById('bank-balance');
+        const bankContainer = document.getElementById('bank-container');
+        const historyList = document.getElementById('history-list');
+        const messageBox = document.getElementById('message-box');
+        const ticketContainer = document.getElementById('ticket-container');
+        const scratchInstruction = document.getElementById('scratch-instruction');
+        const buyAnotherBtn = document.getElementById('buy-another-btn');
+        const jackpotOverlay = document.getElementById('jackpot-overlay');
+
+        window.onload = () => updateBalanceUI(0);
+
+        function formatCurrency(val) {
+            const formatted = Math.abs(val).toLocaleString('en-US', { minimumFractionDigits: 2 });
+            return val < 0 ? `-$${formatted}` : `$${formatted}`;
+        }
+
+        function updateBalanceUI(change) {
+            balance += change;
+            if (change === 0) {
+                bankDisplay.innerText = formatCurrency(balance);
+                return;
+            }
+
+            bankContainer.classList.add('bank-pulsing');
+            const duration = 1200; 
+            const start = displayBalance;
+            const end = balance;
+            const startTime = performance.now();
+
+            const animate = (currentTime) => {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                displayBalance = start + (end - start) * progress;
+                bankDisplay.innerText = formatCurrency(displayBalance);
+                
+                if (progress < 1) requestAnimationFrame(animate);
+                else {
+                    displayBalance = end;
+                    bankDisplay.innerText = formatCurrency(balance);
+                    bankContainer.classList.remove('bank-pulsing');
+                }
+            };
+            requestAnimationFrame(animate);
+        }
+
+        function getUniqueNumbers(count, exclude = []) {
+            const nums = [];
+            while (nums.length < count) {
+                const n = Math.floor(Math.random() * RANGE_MAX) + 1;
+                if (!nums.includes(n) && !exclude.includes(n)) nums.push(n);
+            }
+            return nums;
+        }
+
+        function determinePrize() {
+            const roll = Math.random() * TOTAL_TICKETS;
+            let currentSum = 0;
+            for (const prize of PRIZE_POOL) {
+                currentSum += prize.count;
+                if (roll <= currentSum) return prize.amount;
+            }
+            return 0;
+        }
+
+        function createTicket() {
+            const targetPrize = determinePrize();
+            const winNums = getUniqueNumbers(5);
+            let playerNums = Array(10).fill(null);
+            let playerPrizes = Array(10).fill(0);
+            const possiblePrizes = [5, 10, 15, 20, 50, 100];
+
+            if (targetPrize === JACKPOT_PRIZE) {
+                const slots = [0,1,2,3,4,5,6,7,8,9].sort(() => Math.random() - 0.5);
+                playerNums[slots[0]] = WIN_SYMBOL;
+                playerNums[slots[1]] = WIN_SYMBOL;
+                playerNums[slots[2]] = WIN_SYMBOL;
+                const filler = getUniqueNumbers(7, winNums);
+                let fillerIdx = 0;
+                playerNums = playerNums.map(val => val || filler[fillerIdx++]);
+            } else {
+                const slots = [0,1,2,3,4,5,6,7,8,9].sort(() => Math.random() - 0.5);
+                playerNums[slots[0]] = WIN_SYMBOL;
+                playerNums[slots[1]] = WIN_SYMBOL;
+                if (targetPrize > 0) {
+                    playerNums[slots[2]] = winNums[Math.floor(Math.random() * 5)];
+                    playerPrizes[slots[2]] = targetPrize;
+                    const filler = getUniqueNumbers(7, winNums);
+                    let fillerIdx = 0;
+                    for(let i=3; i<10; i++) playerNums[slots[i]] = filler[fillerIdx++];
+                } else {
+                    const filler = getUniqueNumbers(8, winNums);
+                    let fillerIdx = 0;
+                    for(let i=2; i<10; i++) playerNums[slots[i]] = filler[fillerIdx++];
+                }
+            }
+            playerPrizes = playerPrizes.map((p, i) => {
+                if (playerNums[i] === WIN_SYMBOL) return 0;
+                return p || possiblePrizes[Math.floor(Math.random() * possiblePrizes.length)];
+            });
+            return { winNums, playerNums, playerPrizes, targetPrize };
+        }
+
+        document.getElementById('buy-btn').onclick = () => {
+            updateBalanceUI(-TICKET_PRICE);
+            currentTicket = createTicket();
+            scratchedState = { win: false, player: false };
+            
+            document.getElementById('main-menu').classList.add('hidden');
+            ticketContainer.classList.remove('hidden');
+            
+            setTimeout(() => {
+                renderTicket();
+                buyAnotherBtn.classList.add('hidden');
+                scratchInstruction.classList.remove('hidden');
+                messageBox.innerText = "";
+            }, 50);
+        };
+
+        buyAnotherBtn.onclick = () => {
+            ticketContainer.classList.add('hidden');
+            document.getElementById('main-menu').classList.remove('hidden');
+            jackpotOverlay.classList.add('hidden');
+        };
+
+        function renderTicket() {
+            const winGrid = document.getElementById('winning-numbers-grid');
+            const playerGrid = document.getElementById('player-numbers-grid');
+            winGrid.innerHTML = '';
+            playerGrid.innerHTML = '';
+
+            currentTicket.winNums.forEach(n => {
+                winGrid.innerHTML += `<div class="number-box"><span class="number-val" data-num="${n}">${n}</span></div>`;
+            });
+
+            currentTicket.playerNums.forEach((n, i) => {
+                const prize = currentTicket.playerPrizes[i];
+                const display = n === WIN_SYMBOL ? '<span class="text-red-600">WIN</span>' : n;
+                const prizeTag = n === WIN_SYMBOL ? '' : `<span class="prize-val">$${prize.toLocaleString()}</span>`;
+                playerGrid.innerHTML += `
+                    <div class="number-box">
+                        <span class="number-val" data-num="${n}">${display}</span>
+                        ${prizeTag}
+                    </div>`;
+            });
+
+            setupCanvas('winning-canvas', 'win');
+            setupCanvas('player-canvas', 'player');
+        }
+
+        function setupCanvas(id, type) {
+            const canvas = document.getElementById(id);
+            const ctx = canvas.getContext('2d');
+            const container = canvas.parentElement;
+            
+            canvas.style.display = 'block';
+            canvas.style.opacity = '1';
+            canvas.classList.remove('hidden');
+            
+            canvas.width = container.offsetWidth;
+            canvas.height = container.offsetHeight;
+            
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = '#b1b5bd';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            let isDrawing = false;
+            const handleScratch = (e) => {
+                if (!isDrawing) return;
+                const rect = canvas.getBoundingClientRect();
+                const x = (e.clientX || (e.touches ? e.touches[0].clientX : 0)) - rect.left;
+                const y = (e.clientY || (e.touches ? e.touches[0].clientY : 0)) - rect.top;
+                
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.beginPath();
+                ctx.arc(x, y, 25, 0, Math.PI * 2);
+                ctx.fill();
+                checkCompletion(canvas, type);
+            };
+
+            canvas.onmousedown = () => isDrawing = true;
+            canvas.ontouchstart = (e) => { isDrawing = true; e.preventDefault(); };
+            window.onmouseup = () => isDrawing = false;
+            window.ontouchend = () => isDrawing = false;
+            canvas.onmousemove = handleScratch;
+            canvas.ontouchmove = (e) => { handleScratch(e); e.preventDefault(); };
+        }
+
+        function checkCompletion(canvas, type) {
+            if (scratchedState[type]) return;
+            if (canvas.width <= 0 || canvas.height <= 0) return;
+
+            const ctx = canvas.getContext('2d');
+            try {
+                const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                let transparent = 0;
+                for (let i = 3; i < data.length; i += 4) {
+                    if (data[i] === 0) transparent++;
+                }
+
+                if (transparent / (canvas.width * canvas.height) > 0.65) {
+                    scratchedState[type] = true;
+                    canvas.style.transition = 'opacity 0.4s';
+                    canvas.style.opacity = '0';
+                    setTimeout(() => {
+                        canvas.style.display = 'none';
+                        canvas.classList.add('hidden');
+                    }, 400);
+                    if (scratchedState.win && scratchedState.player) evaluate();
+                }
+            } catch (e) {
+                console.error("Scratch error:", e);
+            }
+        }
+
+        function evaluate() {
+            const winNums = currentTicket.winNums;
+            const pNums = currentTicket.playerNums;
+            const pGrid = document.getElementById('player-numbers-grid');
+            const wGrid = document.getElementById('winning-numbers-grid');
+            const pBoxes = pGrid.children;
+            const wBoxes = wGrid.children;
+
+            const isJackpot = pNums.filter(n => n === WIN_SYMBOL).length >= 3;
+
+            pNums.forEach((n, i) => {
+                let match = false;
+                if (isJackpot && n === WIN_SYMBOL) match = true;
+                else if (!isJackpot && winNums.includes(n) && n !== WIN_SYMBOL) match = true;
+
+                if (match) {
+                    pBoxes[i].classList.add('win-highlight');
+                    pBoxes[i].querySelector('.number-val').classList.add('text-win-green');
+
+                    if (n !== WIN_SYMBOL) {
+                        for (let wb of wBoxes) {
+                            if (parseInt(wb.querySelector('.number-val').dataset.num) === n) {
+                                wb.classList.add('win-highlight');
+                                wb.querySelector('.number-val').classList.add('text-win-green');
+                            }
+                        }
+                        const anim = document.createElement('div');
+                        anim.className = 'win-anim-text';
+                        anim.innerText = `+$${currentTicket.playerPrizes[i]}`;
+                        pBoxes[i].appendChild(anim);
+                    }
+                }
+            });
+
+            if (isJackpot) jackpotOverlay.classList.remove('hidden');
+            if (currentTicket.targetPrize > 0) updateBalanceUI(currentTicket.targetPrize);
+            
+            history.unshift({ amount: currentTicket.targetPrize, time: new Date() });
+            renderHistory();
+
+            setTimeout(() => {
+                scratchInstruction.classList.add('hidden');
+                buyAnotherBtn.classList.remove('hidden');
+            }, 1000);
+        }
+
+        function renderHistory() {
+            historyList.innerHTML = history.slice(0, 10).map(h => {
+                const winText = h.amount > 0 ? `+$${h.amount.toLocaleString()}` : `-$5.00`;
+                const borderClass = h.amount > 0 ? 'border-green-500' : 'border-red-500';
+                const textClass = h.amount > 0 ? 'text-green-400' : 'text-red-400';
+                
+                return `
+                <div class="flex justify-between items-center bg-gray-700/50 p-3 rounded-lg border-l-4 ${borderClass}">
+                    <span class="text-xs text-gray-400 font-bold uppercase">${h.time.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                    <span class="font-bold ${textClass}">${winText}</span>
+                </div>
+            `}).join('') || '<p class="text-gray-500 text-center py-4 text-sm italic">Noch keine Spiele.</p>';
+        }
+    </script>
+</body>
+</html>
