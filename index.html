@@ -39,7 +39,7 @@
             position: relative;
             z-index: 10;
             overflow: visible;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
         }
 
         .number-val {
@@ -50,7 +50,6 @@
             line-height: 1.2;
         }
 
-        /* Increased visibility for prize amounts */
         .prize-val {
             font-family: 'Press Start 2P', cursive;
             font-size: 0.5rem;
@@ -105,7 +104,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            animation: fadeIn 0.5s forwards;
+            animation: fadeIn 0.3s forwards;
             pointer-events: none;
         }
 
@@ -139,9 +138,30 @@
         }
 
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* Custom Scrollbar */
+        .custom-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: #2d3748;
+            border-radius: 10px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: #4a5568;
+            border-radius: 10px;
+        }
+
+        .stat-card {
+            background: rgba(26, 32, 44, 0.6);
+            border: 1px solid #4a5568;
+            border-radius: 12px;
+            padding: 10px;
+            text-align: center;
+        }
     </style>
 </head>
-<body class="min-h-screen flex flex-col items-center py-10 px-4 pb-24">
+<body class="min-h-screen flex flex-col items-center py-6 px-4 pb-24">
 
     <!-- Jackpot Overlay -->
     <div id="jackpot-overlay" class="jackpot-overlay hidden">
@@ -154,7 +174,7 @@
         <h1 class="text-lg font-black text-yellow-400 leading-tight">WIN FOR LIFE<br><span class="text-xs">PRÄVENTATION</span></h1>
         <div id="bank-container" class="bg-gray-800 px-4 py-2 rounded-full border border-yellow-500">
             <span class="text-gray-400 text-xs mr-2 uppercase">KONTO:</span>
-            <span id="bank-balance" class="text-xl font-bold text-green-400">$0.00</span>
+            <span id="bank-balance" class="text-xl font-bold transition-colors duration-300">$0.00</span>
         </div>
     </div>
 
@@ -201,10 +221,35 @@
                 <p id="message-box" class="text-gray-400 font-medium h-6"></p>
             </div>
 
-            <div class="w-full bg-gray-800 rounded-2xl p-4 shadow-xl border border-gray-700">
-                <h3 class="text-gray-400 font-bold text-xs uppercase mb-3 px-1">Spielverlauf</h3>
-                <div id="history-list" class="flex flex-col gap-2 max-h-60 overflow-y-auto pr-1">
-                    <p class="text-gray-500 text-center py-4 text-sm italic">Noch keine Spiele.</p>
+            <!-- Dashboard -->
+            <div class="w-full bg-gray-800 rounded-2xl p-4 shadow-xl border border-gray-700 flex flex-col gap-4">
+                <h3 class="text-gray-400 font-bold text-xs uppercase px-1">Statistiken & Verlauf</h3>
+                
+                <!-- Stats Grid -->
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="stat-card">
+                        <div class="text-[10px] text-gray-500 uppercase font-bold">Tickets</div>
+                        <div id="stat-count" class="text-white font-bold">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="text-[10px] text-gray-500 uppercase font-bold">Gewinne</div>
+                        <div id="stat-won" class="text-green-400 font-bold">$0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="text-[10px] text-gray-500 uppercase font-bold">Verluste</div>
+                        <div id="stat-lost" class="text-red-400 font-bold">$0</div>
+                    </div>
+                </div>
+
+                <!-- Graph -->
+                <div class="bg-gray-900/50 rounded-xl p-2 border border-gray-700">
+                    <div class="text-[10px] text-gray-500 uppercase font-bold mb-1 ml-1 text-center">Kontoverlauf (Netto)</div>
+                    <canvas id="balance-graph" class="w-full h-32"></canvas>
+                </div>
+
+                <!-- History -->
+                <div id="history-list" class="flex flex-col gap-2 max-h-60 overflow-y-auto pr-2 custom-scroll">
+                    <p class="text-gray-500 text-center py-4 text-sm italic">Noch keine Spiele absolviert.</p>
                 </div>
             </div>
         </div>
@@ -230,10 +275,13 @@
         ];
         const TOTAL_TICKETS = 1500000;
 
-        // Starting at 0.00
         let balance = 0;
         let displayBalance = 0;
+        let totalWon = 0;
+        let totalSpent = 0;
+        let ticketCount = 0;
         let history = [];
+        let balanceHistory = [0]; 
         let currentTicket = null;
         let scratchedState = { win: false, player: false };
 
@@ -246,7 +294,14 @@
         const buyAnotherBtn = document.getElementById('buy-another-btn');
         const jackpotOverlay = document.getElementById('jackpot-overlay');
 
-        window.onload = () => updateBalanceUI(0);
+        const statCount = document.getElementById('stat-count');
+        const statWon = document.getElementById('stat-won');
+        const statLost = document.getElementById('stat-lost');
+
+        window.onload = () => {
+            updateBalanceUI(0);
+            drawGraph();
+        };
 
         function formatCurrency(val) {
             const formatted = Math.abs(val).toLocaleString('en-US', { minimumFractionDigits: 2 });
@@ -255,13 +310,16 @@
 
         function updateBalanceUI(change) {
             balance += change;
+            
+            // Initial call or no change
             if (change === 0) {
                 bankDisplay.innerText = formatCurrency(balance);
+                updateBankColor(balance);
                 return;
             }
 
             bankContainer.classList.add('bank-pulsing');
-            const duration = 1200; 
+            const duration = 1000; 
             const start = displayBalance;
             const end = balance;
             const startTime = performance.now();
@@ -272,14 +330,79 @@
                 displayBalance = start + (end - start) * progress;
                 bankDisplay.innerText = formatCurrency(displayBalance);
                 
+                // Keep color updated during animation
+                updateBankColor(displayBalance);
+                
                 if (progress < 1) requestAnimationFrame(animate);
                 else {
                     displayBalance = end;
                     bankDisplay.innerText = formatCurrency(balance);
+                    updateBankColor(balance);
                     bankContainer.classList.remove('bank-pulsing');
                 }
             };
             requestAnimationFrame(animate);
+        }
+
+        function updateBankColor(val) {
+            if (val < 0) {
+                bankDisplay.classList.remove('text-green-400');
+                bankDisplay.classList.add('text-red-400');
+            } else {
+                bankDisplay.classList.remove('text-red-400');
+                bankDisplay.classList.add('text-green-400');
+            }
+        }
+
+        function drawGraph() {
+            const canvas = document.getElementById('balance-graph');
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width = canvas.offsetWidth;
+            const h = canvas.height = canvas.offsetHeight;
+            
+            ctx.clearRect(0, 0, w, h);
+            
+            if (balanceHistory.length < 2) {
+                ctx.fillStyle = '#4a5568';
+                ctx.textAlign = 'center';
+                ctx.fillText('Spielen Sie mehr Tickets', w/2, h/2);
+                return;
+            }
+
+            const minVal = Math.min(...balanceHistory, 0);
+            const maxVal = Math.max(...balanceHistory, 0);
+            const range = maxVal - minVal || 10;
+            const padding = 10;
+            
+            ctx.strokeStyle = '#4a5568';
+            ctx.setLineDash([5, 5]);
+            const zeroY = h - padding - ((0 - minVal) / range) * (h - padding * 2);
+            ctx.beginPath();
+            ctx.moveTo(padding, zeroY);
+            ctx.lineTo(w - padding, zeroY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            ctx.strokeStyle = balance >= 0 ? '#10b981' : '#ef4444';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+
+            for (let i = 0; i < balanceHistory.length; i++) {
+                const x = padding + (i / (balanceHistory.length - 1)) * (w - padding * 2);
+                const y = h - padding - ((balanceHistory[i] - minVal) / range) * (h - padding * 2);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            // Gradient fill
+            const grad = ctx.createLinearGradient(0, 0, 0, h);
+            grad.addColorStop(0, balance >= 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)');
+            grad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.lineTo(w - padding, h);
+            ctx.lineTo(padding, h);
+            ctx.fillStyle = grad;
+            ctx.fill();
         }
 
         function getUniqueNumbers(count, exclude = []) {
@@ -340,26 +463,36 @@
         }
 
         document.getElementById('buy-btn').onclick = () => {
+            ticketCount++;
+            totalSpent += TICKET_PRICE;
             updateBalanceUI(-TICKET_PRICE);
+            
             currentTicket = createTicket();
             scratchedState = { win: false, player: false };
             
             document.getElementById('main-menu').classList.add('hidden');
             ticketContainer.classList.remove('hidden');
             
-            setTimeout(() => {
-                renderTicket();
-                buyAnotherBtn.classList.add('hidden');
-                scratchInstruction.classList.remove('hidden');
-                messageBox.innerText = "";
-            }, 50);
+            renderTicket();
+            buyAnotherBtn.classList.add('hidden');
+            scratchInstruction.classList.remove('hidden');
+            messageBox.innerText = "";
+            
+            updateStats();
         };
 
         buyAnotherBtn.onclick = () => {
             ticketContainer.classList.add('hidden');
             document.getElementById('main-menu').classList.remove('hidden');
             jackpotOverlay.classList.add('hidden');
+            drawGraph();
         };
+
+        function updateStats() {
+            statCount.innerText = ticketCount;
+            statWon.innerText = `$${totalWon.toLocaleString()}`;
+            statLost.innerText = `$${totalSpent.toLocaleString()}`;
+        }
 
         function renderTicket() {
             const winGrid = document.getElementById('winning-numbers-grid');
@@ -438,17 +571,15 @@
 
                 if (transparent / (canvas.width * canvas.height) > 0.65) {
                     scratchedState[type] = true;
-                    canvas.style.transition = 'opacity 0.4s';
+                    canvas.style.transition = 'opacity 0.3s';
                     canvas.style.opacity = '0';
                     setTimeout(() => {
                         canvas.style.display = 'none';
                         canvas.classList.add('hidden');
-                    }, 400);
+                    }, 300);
                     if (scratchedState.win && scratchedState.player) evaluate();
                 }
-            } catch (e) {
-                console.error("Scratch error:", e);
-            }
+            } catch (e) { }
         }
 
         function evaluate() {
@@ -486,29 +617,39 @@
             });
 
             if (isJackpot) jackpotOverlay.classList.remove('hidden');
-            if (currentTicket.targetPrize > 0) updateBalanceUI(currentTicket.targetPrize);
             
+            if (currentTicket.targetPrize > 0) {
+                totalWon += currentTicket.targetPrize;
+                updateBalanceUI(currentTicket.targetPrize);
+            }
+            
+            balanceHistory.push(balance);
             history.unshift({ amount: currentTicket.targetPrize, time: new Date() });
+            
             renderHistory();
+            updateStats();
 
             setTimeout(() => {
                 scratchInstruction.classList.add('hidden');
                 buyAnotherBtn.classList.remove('hidden');
-            }, 1000);
+            }, 600);
         }
 
         function renderHistory() {
-            historyList.innerHTML = history.slice(0, 10).map(h => {
+            historyList.innerHTML = history.map(h => {
                 const winText = h.amount > 0 ? `+$${h.amount.toLocaleString()}` : `-$5.00`;
                 const borderClass = h.amount > 0 ? 'border-green-500' : 'border-red-500';
                 const textClass = h.amount > 0 ? 'text-green-400' : 'text-red-400';
                 
                 return `
                 <div class="flex justify-between items-center bg-gray-700/50 p-3 rounded-lg border-l-4 ${borderClass}">
-                    <span class="text-xs text-gray-400 font-bold uppercase">${h.time.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                    <div class="flex flex-col">
+                        <span class="text-[9px] text-gray-500 font-bold uppercase">${h.time.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'})}</span>
+                        <span class="text-[10px] text-gray-400 font-bold">Ticket #${ticketCount - history.indexOf(h)}</span>
+                    </div>
                     <span class="font-bold ${textClass}">${winText}</span>
                 </div>
-            `}).join('') || '<p class="text-gray-500 text-center py-4 text-sm italic">Noch keine Spiele.</p>';
+            `}).join('') || '<p class="text-gray-500 text-center py-4 text-sm italic">Noch keine Spiele absolviert.</p>';
         }
     </script>
 </body>
