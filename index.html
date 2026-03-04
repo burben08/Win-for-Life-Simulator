@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Win for Life PRÄVENTATION</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎰</text></svg>">
-    
+     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎰</text></svg>">
+    <title>Win for Life PRÄVENTATION - Scratch & Win</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Press+Start+2P&family=Roboto:wght@400;700;900&display=swap');
@@ -53,9 +52,10 @@
             line-height: 1.2;
         }
 
+        /* Increased visibility for prize amounts */
         .prize-val {
             font-family: 'Press Start 2P', cursive;
-            font-size: 0.5rem;
+            font-size: 0.55rem;
             color: #059669;
             margin-top: 6px;
         }
@@ -90,7 +90,6 @@
         }
         .bank-pulsing {
             animation: pulse-bank 0.1s ease-in-out infinite;
-            color: #fbbf24 !important;
         }
 
         @keyframes jackpot-flash {
@@ -166,27 +165,9 @@
             cursor: pointer;
             touch-action: manipulation;
         }
-        
-        #loading-overlay {
-            position: fixed;
-            inset: 0;
-            background: #1a202c;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 999;
-            transition: opacity 0.5s ease;
-        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col items-center py-6 px-4 pb-24">
-
-    <!-- Loading State -->
-    <div id="loading-overlay">
-        <div class="scratch-title text-4xl text-yellow-400 mb-4">LÄDT...</div>
-        <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-yellow-400"></div>
-    </div>
 
     <!-- Jackpot Overlay -->
     <div id="jackpot-overlay" class="jackpot-overlay hidden">
@@ -273,15 +254,13 @@
                 <div id="history-list" class="flex flex-col gap-2 max-h-60 overflow-y-auto pr-2 custom-scroll">
                     <p class="text-gray-500 text-center py-4 text-sm italic">Noch keine Spiele absolviert.</p>
                 </div>
+                
+                <button id="reset-btn" class="text-[10px] text-gray-600 hover:text-red-500 uppercase font-bold mt-2">Fortschritt Zurücksetzen</button>
             </div>
         </div>
     </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
+    <script>
         // ==========================================
         // PROBABILITY CONFIGURATION
         // ==========================================
@@ -289,8 +268,9 @@
         const RANGE_MAX = 32;
         const WIN_SYMBOL = "WIN";
         const JACKPOT_PRIZE = 960000;
+        
         const PRIZE_POOL = [
-            { amount: 960000, count: 2 },
+            { amount: 960000, count: 2 },      // Jackpot
             { amount: 10000, count: 2 },
             { amount: 5000, count: 4 },
             { amount: 1000, count: 10 },
@@ -302,10 +282,8 @@
             { amount: 5, count: 719992 }
         ];
         const TOTAL_TICKETS = 1500000; 
+        // ==========================================
 
-        // ==========================================
-        // GAME STATE
-        // ==========================================
         let balance = 0;
         let displayBalance = 0;
         let totalWon = 0;
@@ -315,14 +293,6 @@
         let balanceHistory = [0]; 
         let currentTicket = null;
         let scratchedState = { win: false, player: false };
-
-        // Firebase Setup
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        let currentUser = null;
 
         const bankDisplay = document.getElementById('bank-balance');
         const bankContainer = document.getElementById('bank-container');
@@ -336,56 +306,59 @@
         const statWon = document.getElementById('stat-won');
         const statLost = document.getElementById('stat-lost');
 
-        // Init Progress Tracking
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                currentUser = user;
-                await loadProgress();
-                document.getElementById('loading-overlay').style.opacity = '0';
-                setTimeout(() => document.getElementById('loading-overlay').classList.add('hidden'), 500);
-            } else {
-                signInAnonymously(auth);
-            }
-        });
+        // ==========================================
+        // PERSISTENCE (LOCAL STORAGE)
+        // ==========================================
+        function saveProgress() {
+            const data = {
+                balance,
+                totalWon,
+                totalSpent,
+                ticketCount,
+                history,
+                balanceHistory
+            };
+            localStorage.setItem('winForLife_Präventation_Save', JSON.stringify(data));
+        }
 
-        async function saveProgress() {
-            if (!currentUser) return;
-            const statsRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'data', 'stats');
-            try {
-                await setDoc(statsRef, {
-                    balance,
-                    totalWon,
-                    totalSpent,
-                    ticketCount,
-                    history: history.map(h => ({ ...h, time: h.time.getTime() })),
-                    balanceHistory
-                });
-            } catch (e) {
-                console.error("Save failed", e);
+        function loadProgress() {
+            const saved = localStorage.getItem('winForLife_Präventation_Save');
+            if (saved) {
+                try {
+                    const data = JSON.parse(saved);
+                    balance = data.balance || 0;
+                    displayBalance = balance;
+                    totalWon = data.totalWon || 0;
+                    totalSpent = data.totalSpent || 0;
+                    ticketCount = data.ticketCount || 0;
+                    history = data.history || [];
+                    balanceHistory = data.balanceHistory || [0];
+                    
+                    updateBalanceUI(0);
+                    updateStats();
+                    renderHistory();
+                    drawGraph();
+                } catch (e) {
+                    console.error("Fehler beim Laden des Spielstands", e);
+                }
             }
         }
 
-        async function loadProgress() {
-            if (!currentUser) return;
-            const statsRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'data', 'stats');
-            const snap = await getDoc(statsRef);
-            if (snap.exists()) {
-                const data = snap.data();
-                balance = data.balance || 0;
-                displayBalance = balance;
-                totalWon = data.totalWon || 0;
-                totalSpent = data.totalSpent || 0;
-                ticketCount = data.ticketCount || 0;
-                balanceHistory = data.balanceHistory || [0];
-                history = (data.history || []).map(h => ({ ...h, time: new Date(h.time) }));
-                
-                updateBalanceUI(0);
-                updateStats();
-                renderHistory();
-                drawGraph();
+        document.getElementById('reset-btn').onclick = () => {
+            if (confirm("Möchtest du wirklich deinen gesamten Fortschritt löschen?")) {
+                localStorage.removeItem('winForLife_Präventation_Save');
+                location.reload();
             }
-        }
+        };
 
+        window.onload = () => {
+            loadProgress();
+            drawGraph();
+        };
+
+        // ==========================================
+        // UI & GAME LOGIC
+        // ==========================================
         function formatCurrency(val) {
             const formatted = Math.abs(val).toLocaleString('en-US', { minimumFractionDigits: 2 });
             return val < 0 ? `-$${formatted}` : `$${formatted}`;
@@ -439,36 +412,50 @@
             const w = canvas.width = canvas.offsetWidth;
             const h = canvas.height = canvas.offsetHeight;
             if (w === 0 || h === 0) return;
+            
             ctx.clearRect(0, 0, w, h);
+            
             if (balanceHistory.length < 2) {
                 ctx.fillStyle = '#4a5568';
                 ctx.textAlign = 'center';
+                ctx.font = '10px Roboto';
                 ctx.fillText('Spielen Sie mehr Tickets', w/2, h/2);
                 return;
             }
+
             const minVal = Math.min(...balanceHistory, 0);
             const maxVal = Math.max(...balanceHistory, 0);
             const range = maxVal - minVal || 10;
             const padding = 10;
+            
             ctx.strokeStyle = '#4a5568';
             ctx.setLineDash([5, 5]);
             const zeroY = h - padding - ((0 - minVal) / range) * (h - padding * 2);
-            ctx.beginPath(); ctx.moveTo(padding, zeroY); ctx.lineTo(w - padding, zeroY); ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(padding, zeroY);
+            ctx.lineTo(w - padding, zeroY);
+            ctx.stroke();
             ctx.setLineDash([]);
+
             ctx.strokeStyle = balance >= 0 ? '#10b981' : '#ef4444';
             ctx.lineWidth = 2;
             ctx.beginPath();
+
             for (let i = 0; i < balanceHistory.length; i++) {
                 const x = padding + (i / (balanceHistory.length - 1)) * (w - padding * 2);
                 const y = h - padding - ((balanceHistory[i] - minVal) / range) * (h - padding * 2);
-                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
             }
             ctx.stroke();
+
             const grad = ctx.createLinearGradient(0, 0, 0, h);
             grad.addColorStop(0, balance >= 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)');
             grad.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.lineTo(padding + (w - padding * 2), h); ctx.lineTo(padding, h);
-            ctx.fillStyle = grad; ctx.fill();
+            ctx.lineTo(padding + (w - padding * 2), h);
+            ctx.lineTo(padding, h);
+            ctx.fillStyle = grad;
+            ctx.fill();
         }
 
         function getUniqueNumbers(count, exclude = []) {
@@ -496,22 +483,29 @@
             let playerNums = Array(10).fill(null);
             let playerPrizes = Array(10).fill(0);
             const possiblePrizes = [5, 10, 15, 20, 50, 100];
+
             if (targetPrize === JACKPOT_PRIZE) {
                 const slots = [0,1,2,3,4,5,6,7,8,9].sort(() => Math.random() - 0.5);
-                playerNums[slots[0]] = WIN_SYMBOL; playerNums[slots[1]] = WIN_SYMBOL; playerNums[slots[2]] = WIN_SYMBOL;
+                playerNums[slots[0]] = WIN_SYMBOL;
+                playerNums[slots[1]] = WIN_SYMBOL;
+                playerNums[slots[2]] = WIN_SYMBOL;
                 const filler = getUniqueNumbers(7, winNums);
-                let fillerIdx = 0; playerNums = playerNums.map(val => val || filler[fillerIdx++]);
+                let fillerIdx = 0;
+                playerNums = playerNums.map(val => val || filler[fillerIdx++]);
             } else {
                 const slots = [0,1,2,3,4,5,6,7,8,9].sort(() => Math.random() - 0.5);
-                playerNums[slots[0]] = WIN_SYMBOL; playerNums[slots[1]] = WIN_SYMBOL;
+                playerNums[slots[0]] = WIN_SYMBOL;
+                playerNums[slots[1]] = WIN_SYMBOL;
                 if (targetPrize > 0) {
                     playerNums[slots[2]] = winNums[Math.floor(Math.random() * 5)];
                     playerPrizes[slots[2]] = targetPrize;
                     const filler = getUniqueNumbers(7, winNums);
-                    let fillerIdx = 0; for(let i=3; i<10; i++) playerNums[slots[i]] = filler[fillerIdx++];
+                    let fillerIdx = 0;
+                    for(let i=3; i<10; i++) playerNums[slots[i]] = filler[fillerIdx++];
                 } else {
                     const filler = getUniqueNumbers(8, winNums);
-                    let fillerIdx = 0; for(let i=2; i<10; i++) playerNums[slots[i]] = filler[fillerIdx++];
+                    let fillerIdx = 0;
+                    for(let i=2; i<10; i++) playerNums[slots[i]] = filler[fillerIdx++];
                 }
             }
             playerPrizes = playerPrizes.map((p, i) => {
@@ -532,13 +526,18 @@
             ticketCount++;
             totalSpent += TICKET_PRICE;
             updateBalanceUI(-TICKET_PRICE);
+            
             currentTicket = createTicket();
             scratchedState = { win: false, player: false };
+            
             document.getElementById('main-menu').classList.add('hidden');
             ticketContainer.classList.remove('hidden');
+            
             renderTicket();
             buyAnotherBtn.classList.add('hidden');
             scratchInstruction.classList.remove('hidden');
+            messageBox.innerText = "";
+            
             updateStats();
             saveProgress();
         });
@@ -552,14 +551,24 @@
         function renderTicket() {
             const winGrid = document.getElementById('winning-numbers-grid');
             const playerGrid = document.getElementById('player-numbers-grid');
-            winGrid.innerHTML = ''; playerGrid.innerHTML = '';
-            currentTicket.winNums.forEach(n => { winGrid.innerHTML += `<div class="number-box"><span class="number-val" data-num="${n}">${n}</span></div>`; });
+            winGrid.innerHTML = '';
+            playerGrid.innerHTML = '';
+
+            currentTicket.winNums.forEach(n => {
+                winGrid.innerHTML += `<div class="number-box"><span class="number-val" data-num="${n}">${n}</span></div>`;
+            });
+
             currentTicket.playerNums.forEach((n, i) => {
                 const prize = currentTicket.playerPrizes[i];
                 const display = n === WIN_SYMBOL ? '<span class="text-red-600">WIN</span>' : n;
                 const prizeTag = n === WIN_SYMBOL ? '' : `<span class="prize-val">$${prize.toLocaleString()}</span>`;
-                playerGrid.innerHTML += `<div class="number-box"><span class="number-val" data-num="${n}">${display}</span>${prizeTag}</div>`;
+                playerGrid.innerHTML += `
+                    <div class="number-box">
+                        <span class="number-val" data-num="${n}">${display}</span>
+                        ${prizeTag}
+                    </div>`;
             });
+
             setupCanvas('winning-canvas', 'win');
             setupCanvas('player-canvas', 'player');
         }
@@ -568,18 +577,34 @@
             const canvas = document.getElementById(id);
             const ctx = canvas.getContext('2d');
             const container = canvas.parentElement;
-            canvas.style.display = 'block'; canvas.style.opacity = '1'; canvas.style.pointerEvents = 'auto';
-            canvas.width = container.offsetWidth; canvas.height = container.offsetHeight;
-            ctx.fillStyle = '#b1b5bd'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            canvas.style.display = 'block';
+            canvas.style.opacity = '1';
+            canvas.style.pointerEvents = 'auto';
+            canvas.classList.remove('hidden');
+            
+            canvas.width = container.offsetWidth;
+            canvas.height = container.offsetHeight;
+            
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = '#b1b5bd';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
             let isDrawing = false;
             const handleScratch = (e) => {
                 if (!isDrawing) return;
                 const rect = canvas.getBoundingClientRect();
                 const touch = e.touches ? e.touches[0] : e;
-                const x = touch.clientX - rect.left; const y = touch.clientY - rect.top;
-                ctx.globalCompositeOperation = 'destination-out'; ctx.beginPath(); ctx.arc(x, y, 25, 0, Math.PI * 2); ctx.fill();
+                const x = touch.clientX - rect.left;
+                const y = touch.clientY - rect.top;
+                
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.beginPath();
+                ctx.arc(x, y, 25, 0, Math.PI * 2);
+                ctx.fill();
                 checkCompletion(canvas, type);
             };
+
             canvas.addEventListener('mousedown', () => isDrawing = true);
             canvas.addEventListener('touchstart', (e) => { isDrawing = true; e.preventDefault(); }, { passive: false });
             window.addEventListener('mouseup', () => isDrawing = false);
@@ -590,15 +615,25 @@
 
         function checkCompletion(canvas, type) {
             if (scratchedState[type]) return;
+            if (canvas.width <= 0 || canvas.height <= 0) return;
+
             const ctx = canvas.getContext('2d');
             try {
                 const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
                 let transparent = 0;
-                for (let i = 3; i < data.length; i += 4) if (data[i] === 0) transparent++;
+                for (let i = 3; i < data.length; i += 4) {
+                    if (data[i] === 0) transparent++;
+                }
+
                 if (transparent / (canvas.width * canvas.height) > 0.65) {
                     scratchedState[type] = true;
-                    canvas.style.pointerEvents = 'none'; canvas.style.transition = 'opacity 0.3s'; canvas.style.opacity = '0';
-                    setTimeout(() => { canvas.style.display = 'none'; canvas.classList.add('hidden'); }, 300);
+                    canvas.style.pointerEvents = 'none';
+                    canvas.style.transition = 'opacity 0.3s';
+                    canvas.style.opacity = '0';
+                    setTimeout(() => {
+                        canvas.style.display = 'none';
+                        canvas.classList.add('hidden');
+                    }, 300);
                     if (scratchedState.win && scratchedState.player) evaluate();
                 }
             } catch (e) { }
@@ -607,52 +642,72 @@
         function evaluate() {
             const winNums = currentTicket.winNums;
             const pNums = currentTicket.playerNums;
-            const pBoxes = document.getElementById('player-numbers-grid').children;
-            const wBoxes = document.getElementById('winning-numbers-grid').children;
+            const pGrid = document.getElementById('player-numbers-grid');
+            const wGrid = document.getElementById('winning-numbers-grid');
+            const pBoxes = pGrid.children;
+            const wBoxes = wGrid.children;
+
             const isJackpot = pNums.filter(n => n === WIN_SYMBOL).length >= 3;
 
             pNums.forEach((n, i) => {
-                let match = (isJackpot && n === WIN_SYMBOL) || (!isJackpot && winNums.includes(n) && n !== WIN_SYMBOL);
+                let match = false;
+                if (isJackpot && n === WIN_SYMBOL) match = true;
+                else if (!isJackpot && winNums.includes(n) && n !== WIN_SYMBOL) match = true;
+
                 if (match) {
                     pBoxes[i].classList.add('win-highlight');
                     pBoxes[i].querySelector('.number-val').classList.add('text-win-green');
+
                     if (n !== WIN_SYMBOL) {
-                        for (let wb of wBoxes) if (parseInt(wb.querySelector('.number-val').dataset.num) === n) {
-                            wb.classList.add('win-highlight'); wb.querySelector('.number-val').classList.add('text-win-green');
+                        for (let wb of wBoxes) {
+                            if (parseInt(wb.querySelector('.number-val').dataset.num) === n) {
+                                wb.classList.add('win-highlight');
+                                wb.querySelector('.number-val').classList.add('text-win-green');
+                            }
                         }
-                        const anim = document.createElement('div'); anim.className = 'win-anim-text';
-                        anim.innerText = `+$${currentTicket.playerPrizes[i]}`; pBoxes[i].appendChild(anim);
+                        const anim = document.createElement('div');
+                        anim.className = 'win-anim-text';
+                        anim.innerText = `+$${currentTicket.playerPrizes[i].toLocaleString()}`;
+                        pBoxes[i].appendChild(anim);
                     }
                 }
             });
 
             if (isJackpot) jackpotOverlay.classList.remove('hidden');
+            
             if (currentTicket.targetPrize > 0) {
                 totalWon += currentTicket.targetPrize;
                 updateBalanceUI(currentTicket.targetPrize);
             }
+            
             balanceHistory.push(balance);
-            history.unshift({ amount: currentTicket.targetPrize, time: new Date() });
+            history.unshift({ amount: currentTicket.targetPrize, time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'}) });
+            
             renderHistory();
             updateStats();
             saveProgress();
-            setTimeout(() => { scratchInstruction.classList.add('hidden'); buyAnotherBtn.classList.remove('hidden'); }, 600);
+
+            setTimeout(() => {
+                scratchInstruction.classList.add('hidden');
+                buyAnotherBtn.classList.remove('hidden');
+            }, 600);
         }
 
         function renderHistory() {
-            historyList.innerHTML = history.map(h => {
+            historyList.innerHTML = history.map((h, idx) => {
                 const winText = h.amount > 0 ? `+$${h.amount.toLocaleString()}` : `+$0.00`;
                 const borderClass = h.amount > 0 ? 'border-green-500' : 'border-red-500';
                 const textClass = h.amount > 0 ? 'text-green-400' : 'text-red-400';
+                
                 return `
                 <div class="flex justify-between items-center bg-gray-700/50 p-3 rounded-lg border-l-4 ${borderClass}">
                     <div class="flex flex-col">
-                        <span class="text-[9px] text-gray-500 font-bold uppercase">${h.time.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'})}</span>
-                        <span class="text-[10px] text-gray-400 font-bold">Ticket #${ticketCount - history.indexOf(h)}</span>
+                        <span class="text-[9px] text-gray-500 font-bold uppercase">${h.time}</span>
+                        <span class="text-[10px] text-gray-400 font-bold">Ticket #${ticketCount - idx}</span>
                     </div>
                     <span class="font-bold ${textClass}">${winText}</span>
-                </div>`;
-            }).join('') || '<p class="text-gray-500 text-center py-4 text-sm italic">Noch keine Spiele absolviert.</p>';
+                </div>
+            `}).join('') || '<p class="text-gray-500 text-center py-4 text-sm italic">Noch keine Spiele absolviert.</p>';
         }
     </script>
 </body>
