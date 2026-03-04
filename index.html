@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Win for Life Präventation - Scratch & Win</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -13,6 +13,7 @@
             font-family: 'Roboto', sans-serif;
             user-select: none;
             overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
         }
 
         .lottery-card {
@@ -139,7 +140,6 @@
 
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        /* Custom Scrollbar */
         .custom-scroll::-webkit-scrollbar {
             width: 6px;
         }
@@ -159,6 +159,11 @@
             padding: 10px;
             text-align: center;
         }
+
+        button {
+            cursor: pointer;
+            touch-action: manipulation;
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col items-center py-6 px-4 pb-24">
@@ -174,7 +179,7 @@
         <h1 class="text-lg font-black text-yellow-400 leading-tight">WIN FOR LIFE<br><span class="text-xs">PRÄVENTATION</span></h1>
         <div id="bank-container" class="bg-gray-800 px-4 py-2 rounded-full border border-yellow-500">
             <span class="text-gray-400 text-xs mr-2 uppercase">KONTO:</span>
-            <span id="bank-balance" class="text-xl font-bold transition-colors duration-300">$0.00</span>
+            <span id="bank-balance" class="text-xl font-bold transition-colors duration-300 text-green-400">$0.00</span>
         </div>
     </div>
 
@@ -202,11 +207,11 @@
                 </div>
             </div>
 
-            <div class="mt-4 flex flex-col items-center min-h-[50px] justify-center">
+            <div class="mt-4 flex flex-col items-center min-h-[60px] justify-center relative z-50">
                 <div id="scratch-instruction" class="text-center text-amber-900 font-bold text-sm animate-pulse">
                     Rubbeln Sie beide Felder frei!
                 </div>
-                <button id="buy-another-btn" class="hidden bg-gray-900 text-white font-black py-3 px-8 rounded-xl hover:scale-105 transition-transform active:scale-95 shadow-lg">
+                <button id="buy-another-btn" class="hidden bg-gray-900 text-white font-black py-4 px-10 rounded-xl hover:scale-105 active:scale-95 transition-all shadow-lg text-lg">
                     ZUM HAUPTMENÜ
                 </button>
             </div>
@@ -225,7 +230,6 @@
             <div class="w-full bg-gray-800 rounded-2xl p-4 shadow-xl border border-gray-700 flex flex-col gap-4">
                 <h3 class="text-gray-400 font-bold text-xs uppercase px-1">Statistiken & Verlauf</h3>
                 
-                <!-- Stats Grid -->
                 <div class="grid grid-cols-3 gap-2">
                     <div class="stat-card">
                         <div class="text-[10px] text-gray-500 uppercase font-bold">Tickets</div>
@@ -241,13 +245,11 @@
                     </div>
                 </div>
 
-                <!-- Graph -->
                 <div class="bg-gray-900/50 rounded-xl p-2 border border-gray-700">
                     <div class="text-[10px] text-gray-500 uppercase font-bold mb-1 ml-1 text-center">Kontoverlauf (Netto)</div>
                     <canvas id="balance-graph" class="w-full h-32"></canvas>
                 </div>
 
-                <!-- History -->
                 <div id="history-list" class="flex flex-col gap-2 max-h-60 overflow-y-auto pr-2 custom-scroll">
                     <p class="text-gray-500 text-center py-4 text-sm italic">Noch keine Spiele absolviert.</p>
                 </div>
@@ -256,24 +258,33 @@
     </div>
 
     <script>
+        // ==========================================
+        // PROBABILITY CONFIGURATION
+        // ==========================================
+        // Adjust these values to change the odds.
+        // TOTAL_TICKETS defines the size of the virtual pool.
+        // 'count' defines how many winning tickets exist in that pool.
         const TICKET_PRICE = 5;
         const RANGE_MAX = 32;
         const WIN_SYMBOL = "WIN";
         const JACKPOT_PRIZE = 960000;
         
         const PRIZE_POOL = [
-            { amount: 960000, count: 2 },
-            { amount: 10000, count: 2 },
+            { amount: 960000, count: 2 },      // 2 Jackpots in the pool
+            { amount: 10000, count: 2 },       // High prize
             { amount: 5000, count: 4 },
             { amount: 1000, count: 10 },
             { amount: 500, count: 40 },
-            { amount: 50, count: 8022 },
+            { amount: 50, count: 8022 },       // Medium prizes
             { amount: 20, count: 14980 },
             { amount: 15, count: 19964 },
             { amount: 10, count: 179984 },
-            { amount: 5, count: 719992 }
+            { amount: 5, count: 719992 }       // Smallest prize (Breakeven)
         ];
-        const TOTAL_TICKETS = 1500000;
+        
+        // The probability of winning a specific prize is (count / TOTAL_TICKETS)
+        const TOTAL_TICKETS = 1500000; 
+        // ==========================================
 
         let balance = 0;
         let displayBalance = 0;
@@ -310,8 +321,6 @@
 
         function updateBalanceUI(change) {
             balance += change;
-            
-            // Initial call or no change
             if (change === 0) {
                 bankDisplay.innerText = formatCurrency(balance);
                 updateBankColor(balance);
@@ -329,8 +338,6 @@
                 const progress = Math.min(elapsed / duration, 1);
                 displayBalance = start + (end - start) * progress;
                 bankDisplay.innerText = formatCurrency(displayBalance);
-                
-                // Keep color updated during animation
                 updateBankColor(displayBalance);
                 
                 if (progress < 1) requestAnimationFrame(animate);
@@ -359,6 +366,7 @@
             const ctx = canvas.getContext('2d');
             const w = canvas.width = canvas.offsetWidth;
             const h = canvas.height = canvas.offsetHeight;
+            if (w === 0 || h === 0) return;
             
             ctx.clearRect(0, 0, w, h);
             
@@ -395,11 +403,10 @@
             }
             ctx.stroke();
 
-            // Gradient fill
             const grad = ctx.createLinearGradient(0, 0, 0, h);
             grad.addColorStop(0, balance >= 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)');
             grad.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.lineTo(w - padding, h);
+            ctx.lineTo(padding + (w - padding * 2), h);
             ctx.lineTo(padding, h);
             ctx.fillStyle = grad;
             ctx.fill();
@@ -462,7 +469,16 @@
             return { winNums, playerNums, playerPrizes, targetPrize };
         }
 
-        document.getElementById('buy-btn').onclick = () => {
+        const handleReturnToMenu = () => {
+            ticketContainer.classList.add('hidden');
+            document.getElementById('main-menu').classList.remove('hidden');
+            jackpotOverlay.classList.add('hidden');
+            setTimeout(drawGraph, 50);
+        };
+
+        buyAnotherBtn.addEventListener('click', handleReturnToMenu);
+
+        document.getElementById('buy-btn').addEventListener('click', () => {
             ticketCount++;
             totalSpent += TICKET_PRICE;
             updateBalanceUI(-TICKET_PRICE);
@@ -479,14 +495,7 @@
             messageBox.innerText = "";
             
             updateStats();
-        };
-
-        buyAnotherBtn.onclick = () => {
-            ticketContainer.classList.add('hidden');
-            document.getElementById('main-menu').classList.remove('hidden');
-            jackpotOverlay.classList.add('hidden');
-            drawGraph();
-        };
+        });
 
         function updateStats() {
             statCount.innerText = ticketCount;
@@ -526,6 +535,7 @@
             
             canvas.style.display = 'block';
             canvas.style.opacity = '1';
+            canvas.style.pointerEvents = 'auto';
             canvas.classList.remove('hidden');
             
             canvas.width = container.offsetWidth;
@@ -539,8 +549,9 @@
             const handleScratch = (e) => {
                 if (!isDrawing) return;
                 const rect = canvas.getBoundingClientRect();
-                const x = (e.clientX || (e.touches ? e.touches[0].clientX : 0)) - rect.left;
-                const y = (e.clientY || (e.touches ? e.touches[0].clientY : 0)) - rect.top;
+                const touch = e.touches ? e.touches[0] : e;
+                const x = touch.clientX - rect.left;
+                const y = touch.clientY - rect.top;
                 
                 ctx.globalCompositeOperation = 'destination-out';
                 ctx.beginPath();
@@ -549,12 +560,12 @@
                 checkCompletion(canvas, type);
             };
 
-            canvas.onmousedown = () => isDrawing = true;
-            canvas.ontouchstart = (e) => { isDrawing = true; e.preventDefault(); };
-            window.onmouseup = () => isDrawing = false;
-            window.ontouchend = () => isDrawing = false;
-            canvas.onmousemove = handleScratch;
-            canvas.ontouchmove = (e) => { handleScratch(e); e.preventDefault(); };
+            canvas.addEventListener('mousedown', () => isDrawing = true);
+            canvas.addEventListener('touchstart', (e) => { isDrawing = true; e.preventDefault(); }, { passive: false });
+            window.addEventListener('mouseup', () => isDrawing = false);
+            window.addEventListener('touchend', () => isDrawing = false);
+            canvas.addEventListener('mousemove', handleScratch);
+            canvas.addEventListener('touchmove', (e) => { handleScratch(e); e.preventDefault(); }, { passive: false });
         }
 
         function checkCompletion(canvas, type) {
@@ -571,6 +582,7 @@
 
                 if (transparent / (canvas.width * canvas.height) > 0.65) {
                     scratchedState[type] = true;
+                    canvas.style.pointerEvents = 'none';
                     canvas.style.transition = 'opacity 0.3s';
                     canvas.style.opacity = '0';
                     setTimeout(() => {
@@ -632,12 +644,14 @@
             setTimeout(() => {
                 scratchInstruction.classList.add('hidden');
                 buyAnotherBtn.classList.remove('hidden');
+                buyAnotherBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }, 600);
         }
 
         function renderHistory() {
             historyList.innerHTML = history.map(h => {
-                const winText = h.amount > 0 ? `+$${h.amount.toLocaleString()}` : `-$5.00`;
+                // Change: Show +$0.00 in red instead of -$5.00
+                const winText = h.amount > 0 ? `+$${h.amount.toLocaleString()}` : `+$0.00`;
                 const borderClass = h.amount > 0 ? 'border-green-500' : 'border-red-500';
                 const textClass = h.amount > 0 ? 'text-green-400' : 'text-red-400';
                 
